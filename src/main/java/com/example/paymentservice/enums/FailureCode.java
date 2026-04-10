@@ -1,0 +1,6 @@
+package com.example.paymentservice.enums;
+
+
+public enum FailureCode {
+    INVALID_REQUEST, INSUFFICIENT_BALANCE, FRAUD_REJECTED, WALLET_DEBIT_FAILED, PAYMENT_NOT_FOUND, RETRY_NOT_ALLOWED, INTERNAL_ERROR
+}
