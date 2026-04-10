@@ -48,7 +48,7 @@ public class PaymentController {
     public ResponseEntity<CreatePaymentResponse> createPayment(@Valid @RequestBody CreatePaymentRequest request) {
 
         // Validating business requirements
-        paymentValidator.validateCreatePaymentRequest(request);
+        //paymentValidator.validateCreatePaymentRequest(request);
 
         // Idempotency Check
         Optional<Payment> existingPayment = idempotencyService.getExistingPaymentIfSameRequest(request);
