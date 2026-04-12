@@ -23,52 +23,79 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
 public class PaymentOrchestrator {
 
+    private static final String ACTOR = "PAYMENT_ORCHESTRATOR";
+
     private final PaymentRepository paymentRepository;
     private final PaymentStateManager paymentStateManager;
-    //I am skipping below for now
     private final PaymentStatusHistoryService paymentStatusHistoryService;
 
     private final MerchantClient merchantClient;
     private final FraudClient fraudClient;
     private final WalletClient walletClient;
     private final LedgerClient ledgerClient;
-    //I am skipping below for now
-    //private final EventPublisher eventPublisher;
 
     @Transactional
     public Payment processPayment(String paymentId) {
-        Payment payment = paymentRepository.findById(paymentId)
+        Payment payment = getPayment(paymentId);
+        movePaymentToProcessing(payment);
+        verifyMerchant(payment);
+        performFraudCheck(payment);
+        performWalletDebit(payment);
+        performLedgerEntry(payment);
+        markPaymentSuccessful(payment);
+        buildSuccessEvent(payment);
+        return payment;
+    }
+
+    private Payment getPayment(String paymentId) {
+        return paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
+    }
 
+    private void movePaymentToProcessing(Payment payment) {
         PaymentStatus oldStatus = payment.getStatus();
-
         paymentStateManager.validateTransition(oldStatus, PaymentStatus.PROCESSING);
 
         payment.setStatus(PaymentStatus.PROCESSING);
-        payment.setUpdatedAt(LocalDateTime.now());
-        paymentRepository.save(payment);
+        savePayment(payment);
 
         paymentStatusHistoryService.recordStatusChange(
                 payment.getPaymentId(),
                 oldStatus,
                 PaymentStatus.PROCESSING,
-                "PAYMENT_ORCHESTRATOR",
+                ACTOR,
                 null,
                 "Payment processing started"
         );
+    }
 
-        // 1. merchant verify
+    private void verifyMerchant(Payment payment) {
         //merchantClient.verifyMerchant(payment.getMerchantId());
+    }
 
-        // 2. fraud check
-        FraudCheckRequest fraudRequest = FraudCheckRequest.builder()
+    private void performFraudCheck(Payment payment) {
+        FraudCheckResponse fraudResponse = fraudClient.evaluateRisk(buildFraudCheckRequest(payment));
+        payment.setEvaluationReference(fraudResponse.getEvaluationReference());
+
+        if ("APPROVED".equalsIgnoreCase(fraudResponse.getRiskDecision())) {
+            payment.setFraudCheckStatus(FraudCheckStatus.APPROVED);
+            savePayment(payment);
+            return;
+        }
+
+        payment.setFraudCheckStatus(FraudCheckStatus.REJECTED);
+        failPayment(payment, fraudResponse.getFailureCode(), fraudResponse.getFailureReason());
+        throw new IllegalArgumentException("Payment failed due to fraud rejection");
+    }
+
+    private FraudCheckRequest buildFraudCheckRequest(Payment payment) {
+        return FraudCheckRequest.builder()
                 .paymentId(payment.getPaymentId())
                 .customerId(payment.getCustomerId())
                 .merchantId(payment.getMerchantId())
@@ -76,44 +103,24 @@ public class PaymentOrchestrator {
                 .amount(payment.getAmount())
                 .currency(payment.getCurrency())
                 .paymentMethod(payment.getPaymentMethod().name())
-//                .requestChannel(payment.getRequestChannel())
-//                .requestTimestamp(Instant.now())
                 .build();
+    }
 
-        FraudCheckResponse fraudResponse = fraudClient.evaluateRisk(fraudRequest);
-
-        payment.setEvaluationReference(fraudResponse.getEvaluationReference());
-
-        if ("APPROVED".equalsIgnoreCase(fraudResponse.getRiskDecision())) {
-            payment.setFraudCheckStatus(FraudCheckStatus.APPROVED);
-            payment.setUpdatedAt(LocalDateTime.now());
-            paymentRepository.save(payment);
-        } else {
-            payment.setFraudCheckStatus(FraudCheckStatus.REJECTED);
-            payment.setFailureCode(FailureCode.valueOf(fraudResponse.getFailureCode()));
-            payment.setFailureReason(fraudResponse.getFailureReason());
-
-            PaymentStatus previousStatus = payment.getStatus();
-            paymentStateManager.validateTransition(previousStatus, PaymentStatus.FAILED);
-
-            payment.setStatus(PaymentStatus.FAILED);
-            payment.setUpdatedAt(LocalDateTime.now());
-
-            paymentRepository.save(payment);
-
-            paymentStatusHistoryService.recordStatusChange(payment.getPaymentId(),
-                    previousStatus,
-                    PaymentStatus.FAILED,
-                    "PAYMENT_ORCHESTRATOR",
-                    fraudResponse.getFailureCode(),
-                    fraudResponse.getFailureReason());
-
-            throw new IllegalArgumentException("Payment failed due to fraud rejection");
+    private void performWalletDebit(Payment payment) {
+        WalletDebitResponse walletResponse = walletClient.debit(buildWalletDebitRequest(payment));
+        if ("SUCCESS".equalsIgnoreCase(walletResponse.getDebitStatus())) {
+            if (payment.getTransactionId() == null || payment.getTransactionId().isBlank()) {
+                payment.setTransactionId("txn_" + payment.getPaymentId());
+            }
+            return;
         }
 
+        failPayment(payment, walletResponse.getFailureCode(), walletResponse.getFailureReason());
+        throw new IllegalArgumentException("Payment failed due to wallet debit failure");
+    }
 
-        // 3. wallet debit
-        WalletDebitRequest walletRequest = WalletDebitRequest.builder()
+    private WalletDebitRequest buildWalletDebitRequest(Payment payment) {
+        return WalletDebitRequest.builder()
                 .walletId(payment.getWalletId())
                 .customerId(payment.getCustomerId())
                 .paymentId(payment.getPaymentId())
@@ -121,43 +128,21 @@ public class PaymentOrchestrator {
                 .amount(payment.getAmount())
                 .currency(payment.getCurrency())
                 .debitReason("merchant_payment")
-//                .requestTimestamp(Instant.now())
                 .build();
+    }
 
-        WalletDebitResponse walletResponse = walletClient.debit(walletRequest);
-
-        if (!"SUCCESS".equalsIgnoreCase(walletResponse.getDebitStatus())) {
-
-            payment.setFailureCode(FailureCode.valueOf(walletResponse.getFailureCode()));
-            payment.setFailureReason(walletResponse.getFailureReason());
-
-            PaymentStatus previousStatus = payment.getStatus();
-            paymentStateManager.validateTransition(previousStatus, PaymentStatus.FAILED);
-
-            payment.setStatus(PaymentStatus.FAILED);
-            payment.setUpdatedAt(LocalDateTime.now());
-
-            paymentRepository.save(payment);
-
-            paymentStatusHistoryService.recordStatusChange(
-                    payment.getPaymentId(),
-                    previousStatus,
-                    PaymentStatus.FAILED,
-                    "PAYMENT_ORCHESTRATOR",
-                    walletResponse.getFailureCode(),
-                    walletResponse.getFailureReason()
-            );
-
-            throw new IllegalArgumentException("Payment failed due to wallet debit failure");
+    private void performLedgerEntry(Payment payment) {
+        LedgerEntryResponse ledgerResponse = ledgerClient.recordEntry(buildLedgerEntryRequest(payment));
+        if ("SUCCESS".equalsIgnoreCase(ledgerResponse.getLedgerRecordStatus())) {
+            return;
         }
 
-// wallet success data persist
-        if (payment.getTransactionId() == null || payment.getTransactionId().isBlank()) {
-            payment.setTransactionId("txn_" + payment.getPaymentId());
-        }
+        failPayment(payment, ledgerResponse.getFailureCode(), ledgerResponse.getFailureReason());
+        throw new IllegalArgumentException("Payment failed due to ledger write failure");
+    }
 
-        // 4. ledger record
-        LedgerEntryRequest ledgerRequest = LedgerEntryRequest.builder()
+    private LedgerEntryRequest buildLedgerEntryRequest(Payment payment) {
+        return LedgerEntryRequest.builder()
                 .paymentId(payment.getPaymentId())
                 .transactionId(payment.getTransactionId())
                 .customerId(payment.getCustomerId())
@@ -169,63 +154,54 @@ public class PaymentOrchestrator {
                 .postingReference("post_" + payment.getPaymentId())
                 .createdTimestamp(LocalDateTime.now())
                 .build();
+    }
 
-        LedgerEntryResponse ledgerResponse = ledgerClient.recordEntry(ledgerRequest);
-
-        if (!"SUCCESS".equalsIgnoreCase(ledgerResponse.getLedgerRecordStatus())) {
-
-            payment.setFailureCode(FailureCode.valueOf(ledgerResponse.getFailureCode()));
-            payment.setFailureReason(ledgerResponse.getFailureReason());
-
-            PaymentStatus previousStatus = payment.getStatus();
-            paymentStateManager.validateTransition(previousStatus, PaymentStatus.FAILED);
-
-            payment.setStatus(PaymentStatus.FAILED);
-            payment.setUpdatedAt(LocalDateTime.now());
-
-            paymentRepository.save(payment);
-
-            paymentStatusHistoryService.recordStatusChange(
-                    payment.getPaymentId(),
-                    previousStatus,
-                    PaymentStatus.FAILED,
-                    "PAYMENT_ORCHESTRATOR",
-                    ledgerResponse.getFailureCode(),
-                    ledgerResponse.getFailureReason()
-            );
-
-            throw new IllegalArgumentException("Payment failed due to ledger write failure");
-        }
-
-// 5. move PROCESSING -> SUCCESS
+    private void markPaymentSuccessful(Payment payment) {
         PaymentStatus previousStatus = payment.getStatus();
-
         paymentStateManager.validateTransition(previousStatus, PaymentStatus.SUCCESS);
 
         payment.setStatus(PaymentStatus.SUCCESS);
         payment.setFailureCode(null);
         payment.setFailureReason(null);
-        payment.setUpdatedAt(LocalDateTime.now());
-
-        paymentRepository.save(payment);
+        savePayment(payment);
 
         paymentStatusHistoryService.recordStatusChange(
                 payment.getPaymentId(),
                 previousStatus,
                 PaymentStatus.SUCCESS,
-                "PAYMENT_ORCHESTRATOR",
+                ACTOR,
                 null,
                 "Payment completed successfully"
         );
+    }
 
-// 6. publish success event
+    private void failPayment(Payment payment, String failureCode, String failureReason) {
+        payment.setFailureCode(FailureCode.valueOf(failureCode));
+        payment.setFailureReason(failureReason);
+
+        PaymentStatus previousStatus = payment.getStatus();
+        paymentStateManager.validateTransition(previousStatus, PaymentStatus.FAILED);
+
+        payment.setStatus(PaymentStatus.FAILED);
+        savePayment(payment);
+
+        paymentStatusHistoryService.recordStatusChange(
+                payment.getPaymentId(),
+                previousStatus,
+                PaymentStatus.FAILED,
+                ACTOR,
+                failureCode,
+                failureReason
+        );
+    }
+
+    private PaymentResultEvent buildSuccessEvent(Payment payment) {
         PaymentResultEvent event = PaymentResultEvent.builder()
                 .eventType("PAYMENT_SUCCESS")
                 .paymentId(payment.getPaymentId())
                 .transactionId(payment.getTransactionId())
                 .customerId(payment.getCustomerId())
                 .merchantId(payment.getMerchantId())
-//                .walletId(payment.getWalletId())
                 .status(payment.getStatus().name())
                 .amount(payment.getAmount())
                 .currency(payment.getCurrency())
@@ -233,10 +209,12 @@ public class PaymentOrchestrator {
                 .build();
 
 //        eventPublisher.publish(event);
+        savePayment(payment);
+        return event;
+    }
 
+    private void savePayment(Payment payment) {
         payment.setUpdatedAt(LocalDateTime.now());
         paymentRepository.save(payment);
-
-        return payment;
     }
 }
