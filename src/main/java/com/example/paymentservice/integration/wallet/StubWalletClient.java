@@ -1,25 +1,32 @@
 package com.example.paymentservice.integration.wallet;
 
-
-import org.springframework.beans.factory.annotation.Value;
+import com.example.paymentservice.properties.StubClientProperties;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
 @Component
+@RequiredArgsConstructor
 public class StubWalletClient implements WalletClient {
 
-    @Value("${payment.stub.wallet.mode:SUCCESS}")
-    private String mode;
+    private final StubClientProperties stubClientProperties;
+
     @Override
     public WalletDebitResponse debit(WalletDebitRequest request) {
+        StubClientProperties.Wallet walletProperties = stubClientProperties.getWallet();
         WalletDebitResponse response = new WalletDebitResponse();
+        response.setDebitStatus(walletProperties.isDebitSuccess() ? "SUCCESS" : "FAILED");
+        response.setWalletTransactionId(walletProperties.getTransactionId());
+        response.setRemainingBalance(new BigDecimal(walletProperties.getRemainingBalance()));
 
-        response.setDebitStatus("SUCCESS");
-        response.setWalletTransactionId("wtxn_" + request.getPaymentId());
-        response.setRemainingBalance(new BigDecimal("1000.00"));
-        response.setFailureCode(null);
-        response.setFailureReason(null);
+        if (walletProperties.isDebitSuccess()) {
+            response.setFailureCode(null);
+            response.setFailureReason(null);
+        } else {
+            response.setFailureCode(walletProperties.getFailureCode());
+            response.setFailureReason(walletProperties.getFailureReason());
+        }
 
         return response;
     }

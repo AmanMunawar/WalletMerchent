@@ -31,6 +31,7 @@ public class StubClientProperties {
     public static class Wallet {
         private boolean debitSuccess = true;
         private String transactionId = "wallet_txn_stub";
+        private String remainingBalance = "1000.00";
         private String failureCode = "INSUFFICIENT_BALANCE";
         private String failureReason = "Insufficient balance";
     }
@@ -39,6 +40,7 @@ public class StubClientProperties {
     @Setter
     public static class Ledger {
         private boolean recordSuccess = true;
+        private String ledgerEntryId = "ledger_entry_stub";
         private String postingReference = "ledger_post_stub";
         private String failureCode = "LEDGER_WRITE_FAILED";
         private String failureReason = "Ledger write failed";

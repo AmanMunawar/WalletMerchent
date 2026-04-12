@@ -82,19 +82,35 @@ public class PaymentOrchestrator {
 
         FraudCheckResponse fraudResponse = fraudClient.evaluateRisk(fraudRequest);
 
-//        payment.setFraudReference(fraudResponse.getEvaluationReference());
+        payment.setEvaluationReference(fraudResponse.getEvaluationReference());
 
         if ("APPROVED".equalsIgnoreCase(fraudResponse.getRiskDecision())) {
-//            payment.setFraudCheckStatus(FraudCheckStatus.APPROVED);
-        } else {
-//            payment.setFraudCheckStatus(FraudCheckStatus.REJECTED);
-            payment.setFailureCode(FailureCode.valueOf(fraudResponse.getFailureCode()));
-            payment.setFailureReason(fraudResponse.getFailureReason());
+            payment.setFraudCheckStatus(FraudCheckStatus.APPROVED);
             payment.setUpdatedAt(LocalDateTime.now());
             paymentRepository.save(payment);
+        } else {
+            payment.setFraudCheckStatus(FraudCheckStatus.REJECTED);
+            payment.setFailureCode(FailureCode.valueOf(fraudResponse.getFailureCode()));
+            payment.setFailureReason(fraudResponse.getFailureReason());
 
-            throw new IllegalStateException("Fraud check not approved");
+            PaymentStatus previousStatus = payment.getStatus();
+            paymentStateManager.validateTransition(previousStatus, PaymentStatus.FAILED);
+
+            payment.setStatus(PaymentStatus.FAILED);
+            payment.setUpdatedAt(LocalDateTime.now());
+
+            paymentRepository.save(payment);
+
+            paymentStatusHistoryService.recordStatusChange(payment.getPaymentId(),
+                    previousStatus,
+                    PaymentStatus.FAILED,
+                    "PAYMENT_ORCHESTRATOR",
+                    fraudResponse.getFailureCode(),
+                    fraudResponse.getFailureReason());
+
+            throw new IllegalArgumentException("Payment failed due to fraud rejection");
         }
+
 
         // 3. wallet debit
         WalletDebitRequest walletRequest = WalletDebitRequest.builder()
@@ -111,12 +127,28 @@ public class PaymentOrchestrator {
         WalletDebitResponse walletResponse = walletClient.debit(walletRequest);
 
         if (!"SUCCESS".equalsIgnoreCase(walletResponse.getDebitStatus())) {
+
             payment.setFailureCode(FailureCode.valueOf(walletResponse.getFailureCode()));
             payment.setFailureReason(walletResponse.getFailureReason());
+
+            PaymentStatus previousStatus = payment.getStatus();
+            paymentStateManager.validateTransition(previousStatus, PaymentStatus.FAILED);
+
+            payment.setStatus(PaymentStatus.FAILED);
             payment.setUpdatedAt(LocalDateTime.now());
+
             paymentRepository.save(payment);
 
-            throw new IllegalStateException("Wallet debit failed");
+            paymentStatusHistoryService.recordStatusChange(
+                    payment.getPaymentId(),
+                    previousStatus,
+                    PaymentStatus.FAILED,
+                    "PAYMENT_ORCHESTRATOR",
+                    walletResponse.getFailureCode(),
+                    walletResponse.getFailureReason()
+            );
+
+            throw new IllegalArgumentException("Payment failed due to wallet debit failure");
         }
 
 // wallet success data persist
@@ -141,12 +173,28 @@ public class PaymentOrchestrator {
         LedgerEntryResponse ledgerResponse = ledgerClient.recordEntry(ledgerRequest);
 
         if (!"SUCCESS".equalsIgnoreCase(ledgerResponse.getLedgerRecordStatus())) {
+
             payment.setFailureCode(FailureCode.valueOf(ledgerResponse.getFailureCode()));
             payment.setFailureReason(ledgerResponse.getFailureReason());
+
+            PaymentStatus previousStatus = payment.getStatus();
+            paymentStateManager.validateTransition(previousStatus, PaymentStatus.FAILED);
+
+            payment.setStatus(PaymentStatus.FAILED);
             payment.setUpdatedAt(LocalDateTime.now());
+
             paymentRepository.save(payment);
 
-            throw new IllegalStateException("Ledger write failed");
+            paymentStatusHistoryService.recordStatusChange(
+                    payment.getPaymentId(),
+                    previousStatus,
+                    PaymentStatus.FAILED,
+                    "PAYMENT_ORCHESTRATOR",
+                    ledgerResponse.getFailureCode(),
+                    ledgerResponse.getFailureReason()
+            );
+
+            throw new IllegalArgumentException("Payment failed due to ledger write failure");
         }
 
 // 5. move PROCESSING -> SUCCESS

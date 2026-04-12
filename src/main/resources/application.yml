@@ -25,32 +25,30 @@ management:
   endpoint:
     health:
       show-details: always
-#
-#payment:
-#  stub:
-#    fraud:
-#      decision: APPROVED
-#      score: 10
-#      reference: fraud_stub_ref
-#      failure-code: FRAUD_REJECTED
-#      failure-reason: Transaction rejected by stub fraud policy
-#
-#    wallet:
-#      debit-success: true
-#      transaction-id: wallet_txn_stub
-#      failure-code: INSUFFICIENT_BALANCE
-#      failure-reason: Insufficient balance
-#
-#    ledger:
-#      record-success: true
-#      posting-reference: ledger_post_stub
-#      failure-code: LEDGER_WRITE_FAILED
-#      failure-reason: Ledger write failed
-#
-#    event:
-#      publish-success: true
-#
-#    merchant:
-#      verify-success: true
-#      failure-code: MERCHANT_NOT_FOUND
-#      failure-reason: Merchant verification failed
+payment:
+  stub:
+    fraud:
+      decision: APPROVED
+      score: 10
+      reference: fraud_stub_ref
+      failure-code: FRAUD_REJECTED
+      failure-reason: Transaction rejected by stub fraud policy
+
+
+    wallet:
+      debit-success: true
+      failure-code: INSUFFICIENT_BALANCE
+      failure-reason: Insufficient balance
+
+    ledger:
+      record-success: false
+      failure-code: LEDGER_WRITE_FAILED
+      failure-reason: Ledger write failed
+
+    event:
+      publish-success: true
+
+    merchant:
+      verify-success: true
+      failure-code: MERCHANT_NOT_FOUND
+      failure-reason: Merchant verification failed

@@ -1,9 +1,11 @@
 package com.example.paymentservice.entity.payment;
 
 import com.example.paymentservice.enums.FailureCode;
+import com.example.paymentservice.enums.FraudCheckStatus;
 import com.example.paymentservice.enums.PaymentMethod;
 import com.example.paymentservice.enums.PaymentStatus;
 import jakarta.persistence.*;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -14,10 +16,7 @@ public class Payment {
     public Payment() {
     }
 
-    public Payment(String paymentId, String customerId, String merchantId, String walletId, BigDecimal amount,
-                   String currency, PaymentMethod paymentMethod, PaymentStatus status, String transactionId, String idempotencyKey,
-                   String requestHash, FailureCode failureCode, String failureReason, LocalDateTime createdAt,
-                   LocalDateTime updatedAt, Integer version) {
+    public Payment(String paymentId, String customerId, String merchantId, String walletId, BigDecimal amount, String currency, PaymentMethod paymentMethod, PaymentStatus status, String transactionId, String idempotencyKey, String requestHash, FailureCode failureCode, String failureReason, LocalDateTime createdAt, LocalDateTime updatedAt, Integer version) {
         this.paymentId = paymentId;
         this.customerId = customerId;
         this.merchantId = merchantId;
@@ -60,8 +59,23 @@ public class Payment {
     private PaymentMethod paymentMethod;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "fraud_check_status")
+    private FraudCheckStatus fraudCheckStatus;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PaymentStatus status;
+
+    public String getEvaluationReference() {
+        return evaluationReference;
+    }
+
+    public void setEvaluationReference(String evaluationReference) {
+        this.evaluationReference = evaluationReference;
+    }
+
+    @Column(name = "evaluation_reference")
+    private String evaluationReference;
 
     @Column(name = "transaction_id")
     private String transactionId;
@@ -214,5 +228,13 @@ public class Payment {
 
     public void setVersion(Integer version) {
         this.version = version;
+    }
+
+    public FraudCheckStatus getFraudCheckStatus() {
+        return fraudCheckStatus;
+    }
+
+    public void setFraudCheckStatus(FraudCheckStatus fraudCheckStatus) {
+        this.fraudCheckStatus = fraudCheckStatus;
     }
 }
