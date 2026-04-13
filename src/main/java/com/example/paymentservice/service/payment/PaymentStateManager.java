@@ -33,4 +33,27 @@ public class PaymentStateManager {
         validateTransition(currentStatus, newStatus);
         payment.setStatus(newStatus);
     }
+
+    public boolean isRetryAllowed(Payment payment) {
+        if (payment.getStatus() != PaymentStatus.FAILED) {
+            return false;
+        }
+
+        if (payment.getFailureCode() == null) {
+            return false;
+        }
+
+        return switch (payment.getFailureCode()) {
+            case WALLET_SERVICE_TIMEOUT,
+                 LEDGER_WRITE_FAILED,
+                 FRAUD_SERVICE_TIMEOUT -> true;
+
+            case FRAUD_REJECTED,
+                 INSUFFICIENT_BALANCE,
+                 INVALID_REQUEST,
+                 RETRY_NOT_ALLOWED -> false;
+
+            default -> false;
+        };
+    }
 }

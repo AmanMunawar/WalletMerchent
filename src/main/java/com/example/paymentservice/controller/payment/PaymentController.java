@@ -1,9 +1,12 @@
 package com.example.paymentservice.controller.payment;
 
 import com.example.paymentservice.dto.payment.request.CreatePaymentRequest;
+import com.example.paymentservice.dto.payment.request.RetryPaymentRequest;
 import com.example.paymentservice.dto.payment.response.CreatePaymentResponse;
 import com.example.paymentservice.dto.payment.response.GetPaymentStatusResponse;
+import com.example.paymentservice.dto.payment.response.RetryPaymentResponse;
 import com.example.paymentservice.entity.payment.Payment;
+import com.example.paymentservice.service.payment.PaymentRetryService;
 import com.example.paymentservice.service.payment.PaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final PaymentRetryService paymentRetryService;
 
     @PostMapping
     public ResponseEntity<CreatePaymentResponse> createPayment(@Valid @RequestBody CreatePaymentRequest request) {
@@ -27,10 +31,18 @@ public class PaymentController {
         return ResponseEntity.ok(generateCreatePaymentResponse(result.payment()));//
     }
 
-
     @GetMapping("/{paymentId}")
     public ResponseEntity<GetPaymentStatusResponse> getPaymentStatus(@PathVariable String paymentId) {
         return ResponseEntity.ok(generateGetPaymentStatusResponse(paymentService.getPaymentById(paymentId)));
+    }
+
+    @PostMapping("/{paymentId}/retry")
+    public ResponseEntity<RetryPaymentResponse> retryPayment(
+            @PathVariable String paymentId,
+            @Valid @RequestBody RetryPaymentRequest request
+    ) {
+        RetryPaymentResponse response = paymentRetryService.retryPayment(paymentId, request);
+        return ResponseEntity.ok(response);
     }
 
     private CreatePaymentResponse generateCreatePaymentResponse(Payment payment) {

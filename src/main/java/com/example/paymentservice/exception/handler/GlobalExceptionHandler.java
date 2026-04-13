@@ -3,6 +3,8 @@ package com.example.paymentservice.exception.handler;
 import com.example.paymentservice.dto.error.ErrorResponse;
 import com.example.paymentservice.exception.payment.IdempotencyConflictException;
 import com.example.paymentservice.exception.payment.InvalidPaymentStateTransitionException;
+import com.example.paymentservice.exception.payment.PaymentNotFoundException;
+import com.example.paymentservice.exception.payment.RetryNotAllowedException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -70,6 +72,20 @@ public class GlobalExceptionHandler {
         ErrorResponse errorResponse = buildErrorResponse("INVALID_STATE_TRANSITION", ex.getMessage(), null, null, request);
 
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(errorResponse);
+    }
+
+    @ExceptionHandler(RetryNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleRetryNotAllowed(RetryNotAllowedException ex, HttpServletRequest request) {
+        ErrorResponse error = buildErrorResponse("RETRY_NOT_ALLOWED", ex.getMessage(), null, null, request);
+
+        return ResponseEntity.unprocessableEntity().body(error);
+    }
+
+    @ExceptionHandler(PaymentNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handlePaymentNotFound(RetryNotAllowedException ex, HttpServletRequest request) {
+        ErrorResponse error = buildErrorResponse("PAYMENT_NOT_FOUND", ex.getMessage(), null, null, request);
+
+        return ResponseEntity.unprocessableEntity().body(error);
     }
 
     private ErrorResponse buildErrorResponse(String errorCode, String errorMessage, String paymentId, String status, HttpServletRequest request) {
