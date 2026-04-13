@@ -35,6 +35,7 @@ class PaymentRepositoryTest {
         payment.setCurrency("USD");
         payment.setPaymentMethod(PaymentMethod.WALLET);
         payment.setStatus(PaymentStatus.CREATED);
+        payment.setRetryCount(0);
         payment.setTransactionId(null);
         payment.setIdempotencyKey("idem_001");
         payment.setRequestHash("hash_001");
