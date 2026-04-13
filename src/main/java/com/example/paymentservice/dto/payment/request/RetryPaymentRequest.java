@@ -2,28 +2,16 @@ package com.example.paymentservice.dto.payment.request;
 
 
 import jakarta.validation.constraints.NotBlank;
+import lombok.Getter;
+import lombok.Setter;
 
+@Getter
+@Setter
 public class RetryPaymentRequest {
 
-    @NotBlank
+    @NotBlank(message = "reason is required")
     private String reason;
 
-    @NotBlank
+    @NotBlank(message = "requestedBy is required")
     private String requestedBy;
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public String getRequestedBy() {
-        return requestedBy;
-    }
-
-    public void setRequestedBy(String requestedBy) {
-        this.requestedBy = requestedBy;
-    }
 }

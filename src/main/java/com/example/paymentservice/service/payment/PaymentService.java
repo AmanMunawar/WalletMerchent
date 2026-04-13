@@ -30,7 +30,7 @@ public class PaymentService {
     private final IdempotencyService idempotencyService;
     private final PaymentOrchestrator paymentOrchestrator;
 
-    @Transactional
+
     public PaymentProcessingResult createAndProcessPayment(CreatePaymentRequest request) {
         paymentValidator.validateCreatePaymentRequest(request);
 
@@ -45,7 +45,7 @@ public class PaymentService {
         return new PaymentProcessingResult(paymentOrchestrator.processPayment(savedPayment.getPaymentId()), true);
     }
 
-    @Transactional(readOnly = true)
+
     public Payment getPaymentById(String paymentId) {
         return paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Payment not found"));

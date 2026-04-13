@@ -40,7 +40,7 @@ public class PaymentOrchestrator {
     private final WalletClient walletClient;
     private final LedgerClient ledgerClient;
 
-    @Transactional
+
     public Payment processPayment(String paymentId) {
         Payment payment = getPayment(paymentId);
         movePaymentToProcessing(payment);
@@ -119,6 +119,16 @@ public class PaymentOrchestrator {
         throw new IllegalArgumentException("Payment failed due to wallet debit failure");
     }
 
+    private void performLedgerEntry(Payment payment) {
+        LedgerEntryResponse ledgerResponse = ledgerClient.recordEntry(buildLedgerEntryRequest(payment));
+        if ("SUCCESS".equalsIgnoreCase(ledgerResponse.getLedgerRecordStatus())) {
+            return;
+        }
+
+        failPayment(payment, ledgerResponse.getFailureCode(), ledgerResponse.getFailureReason());
+        throw new IllegalArgumentException("Payment failed due to ledger write failure");
+    }
+
     private WalletDebitRequest buildWalletDebitRequest(Payment payment) {
         return WalletDebitRequest.builder()
                 .walletId(payment.getWalletId())
@@ -129,16 +139,6 @@ public class PaymentOrchestrator {
                 .currency(payment.getCurrency())
                 .debitReason("merchant_payment")
                 .build();
-    }
-
-    private void performLedgerEntry(Payment payment) {
-        LedgerEntryResponse ledgerResponse = ledgerClient.recordEntry(buildLedgerEntryRequest(payment));
-        if ("SUCCESS".equalsIgnoreCase(ledgerResponse.getLedgerRecordStatus())) {
-            return;
-        }
-
-        failPayment(payment, ledgerResponse.getFailureCode(), ledgerResponse.getFailureReason());
-        throw new IllegalArgumentException("Payment failed due to ledger write failure");
     }
 
     private LedgerEntryRequest buildLedgerEntryRequest(Payment payment) {
