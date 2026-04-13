@@ -9,6 +9,8 @@ import com.example.paymentservice.orchestrator.PaymentOrchestrator;
 import com.example.paymentservice.repository.payment.PaymentRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+
 @Service
 public class PaymentRetryService {
 
@@ -34,6 +36,11 @@ public class PaymentRetryService {
                     "Retry is not allowed for paymentId=" + paymentId + " in status=" + payment.getStatus()
             );
         }
+
+        Integer currentRetryCount = payment.getRetryCount() == null ? 0 : payment.getRetryCount();
+        payment.setRetryCount(currentRetryCount + 1);
+        payment.setUpdatedAt(LocalDateTime.now());
+        paymentRepository.save(payment);
 
         Payment retriedPayment = paymentOrchestrator.processPayment(paymentId);
 
