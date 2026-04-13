@@ -39,6 +39,17 @@ public class Payment {
     @Column(name = "payment_id")
     private String paymentId;
 
+    public Integer getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(Integer retryCount) {
+        this.retryCount = retryCount;
+    }
+
+    @Column(name = "retry_count", nullable = false)
+    private Integer retryCount = 0;
+
     @Column(name = "customer_id", nullable = false)
     private String customerId;
 

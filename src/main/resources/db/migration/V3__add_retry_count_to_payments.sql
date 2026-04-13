@@ -1,0 +1,2 @@
+ALTER TABLE payments
+ADD COLUMN retry_count INT DEFAULT 0 NOT NULL;
