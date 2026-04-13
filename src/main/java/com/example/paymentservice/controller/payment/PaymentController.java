@@ -24,7 +24,7 @@ public class PaymentController {
         if (result.created()) {
             return ResponseEntity.status(HttpStatus.CREATED).body(generateCreatePaymentResponse(result.payment()));
         }
-        return ResponseEntity.ok(generateCreatePaymentResponse(result.payment()));
+        return ResponseEntity.ok(generateCreatePaymentResponse(result.payment()));//
     }
 
 
