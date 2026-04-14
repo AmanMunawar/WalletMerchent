@@ -49,7 +49,7 @@ public class PaymentController {
         CreatePaymentResponse response = new CreatePaymentResponse();
         response.setPaymentId(payment.getPaymentId());
         response.setTransactionId(payment.getTransactionId());
-        response.setStatus(com.example.paymentservice.enums.PaymentStatus.CREATED);
+        response.setStatus(payment.getStatus());
         response.setAmount(payment.getAmount());
         response.setCurrency(payment.getCurrency());
         response.setMerchantId(payment.getMerchantId());
